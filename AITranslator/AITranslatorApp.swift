@@ -111,6 +111,9 @@ struct AITranslatorApp: App {
     // Menu bar
     @State private var menuBarManager = MenuBarManager()
     
+    // Update checker
+    @State private var updateChecker = UpdateChecker()
+    
     init() {
         let settings = SettingsManager.shared
         let reg = ProviderRegistry.shared
@@ -158,6 +161,7 @@ struct AITranslatorApp: App {
             )
             .onAppear {
                 setupMenuBar()
+                checkForUpdates()
             }
         }
         .modelContainer(modelContainer)
@@ -178,5 +182,17 @@ struct AITranslatorApp: App {
         
         let quickView = QuickTranslateView(viewModel: quickVM)
         menuBarManager.setup(with: quickView)
+    }
+    
+    // MARK: - Update Check
+    
+    private func checkForUpdates() {
+        updateChecker.checkForUpdates()
+        
+        // Show alert after a short delay to let the UI settle
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            updateChecker.showUpdateAlertIfNeeded()
+        }
     }
 }
