@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/app-icon.png" alt="AI Translator" width="128" height="128" style="border-radius: 22px;">
+  <img src="assets/aitranslator.png" alt="AI Translator" width="128" height="128" style="border-radius: 22px;">
 </p>
 
 <h1 align="center">AI Translator</h1>
