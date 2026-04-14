@@ -102,13 +102,29 @@ final class SettingsManager {
         
         // Add new key
         guard let data = key.data(using: .utf8) else { return false }
-        let addQuery: [String: Any] = [
+        
+        var addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
         ]
+        
+        // Use SecAccessControl to allow access without password prompt.
+        // The app is sandboxed, so only this app can access its own keychain items.
+        var error: Unmanaged<CFError>?
+        if let accessControl = SecAccessControlCreateWithFlags(
+            nil,
+            kSecAttrAccessibleAfterFirstUnlock,
+            [],  // No additional constraints — no password/biometric prompt
+            &error
+        ) {
+            addQuery[kSecAttrAccessControl as String] = accessControl
+        } else {
+            // Fallback: use kSecAttrAccessible directly
+            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        }
+        
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         if status != errSecSuccess {
             print("[Keychain] Failed to save API key for \(providerId): OSStatus \(status)")
