@@ -37,7 +37,8 @@
 
 ## 🖥️ Screenshots
 
-> _Run the app and add your screenshots here_
+![alt text](assets/main-screenshot.png)
+![alt text](assets/tray-menu.png)
 
 ## 📋 Requirements
 
