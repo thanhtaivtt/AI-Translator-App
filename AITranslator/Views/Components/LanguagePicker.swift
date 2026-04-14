@@ -14,7 +14,12 @@ struct LanguagePicker: View {
     let languages: [Language]
     
     var body: some View {
-        Menu {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(.caption2, design: .rounded, weight: .medium))
+                .foregroundStyle(.textTertiary)
+            
+            Menu {
             ForEach(languages) { language in
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -22,7 +27,7 @@ struct LanguagePicker: View {
                     }
                 }) {
                     HStack(spacing: 8) {
-                        Text(language.flag)
+                        Text("\(language.flag) \(language.code.uppercased())")
                         Text(language.displayName)
                     }
                 }
@@ -48,6 +53,7 @@ struct LanguagePicker: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+        }
     }
 }
 
