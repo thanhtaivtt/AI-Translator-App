@@ -45,14 +45,16 @@ final class GeminiProvider: LLMProvider {
         customPrompt: String?
     ) async throws -> String {
         let apiKey = try getAPIKey()
-        let (systemPrompt, userPrompt) = buildPrompts(text: text, from: sourceLanguage, to: targetLanguage, customPrompt: customPrompt)
+        let prompts = PromptBuilder.build(text: text, from: sourceLanguage, to: targetLanguage, customPrompt: customPrompt)
         
         let request = GeminiGenerateRequest(
-            contents: [.user(userPrompt)],
-            systemInstruction: .system(systemPrompt),
+            contents: [.user(prompts.user)],
+            systemInstruction: .system(prompts.system),
             generationConfig: GeminiGenerationConfig()
         )
         
+        // ⚠️ Gemini API requires key in URL query string.
+        // Do NOT log request URLs. Consider OAuth2 for production.
         let url = "\(baseURL)/\(model):generateContent?key=\(apiKey)"
         let urlRequest = try buildURLRequest(url: url, body: request)
         
@@ -87,14 +89,16 @@ final class GeminiProvider: LLMProvider {
             Task {
                 do {
                     let apiKey = try getAPIKey()
-                    let (systemPrompt, userPrompt) = buildPrompts(text: text, from: sourceLanguage, to: targetLanguage, customPrompt: customPrompt)
+                    let prompts = PromptBuilder.build(text: text, from: sourceLanguage, to: targetLanguage, customPrompt: customPrompt)
                     
                     let request = GeminiGenerateRequest(
-                        contents: [.user(userPrompt)],
-                        systemInstruction: .system(systemPrompt),
+                        contents: [.user(prompts.user)],
+                        systemInstruction: .system(prompts.system),
                         generationConfig: GeminiGenerationConfig()
                     )
                     
+                    // ⚠️ Gemini API requires key in URL query string.
+                    // Do NOT log request URLs. Consider OAuth2 for production.
                     let url = "\(baseURL)/\(model):streamGenerateContent?alt=sse&key=\(apiKey)"
                     let urlRequest = try buildURLRequest(url: url, body: request)
                     
@@ -141,8 +145,8 @@ final class GeminiProvider: LLMProvider {
                                let text = content.parts.first?.text {
                                 continuation.yield(text)
                             }
-                        } catch is LLMProviderError {
-                            throw LLMProviderError.streamingError(message: "Stream error")
+                        } catch let error as LLMProviderError {
+                            throw error  // Re-throw original error
                         } catch {
                             // Skip malformed chunks
                             continue
@@ -166,31 +170,7 @@ final class GeminiProvider: LLMProvider {
         return apiKey
     }
     
-    private func buildPrompts(
-        text: String,
-        from sourceLanguage: Language,
-        to targetLanguage: Language,
-        customPrompt: String?
-    ) -> (system: String, user: String) {
-        let systemPrompt: String
-        if let custom = customPrompt, !custom.isEmpty {
-            systemPrompt = custom
-        } else {
-            systemPrompt = AppDefaults.defaultSystemPrompt
-        }
-        
-        let sourceDesc = sourceLanguage == .auto
-            ? "the source language (auto-detect it)"
-            : sourceLanguage.englishName
-        
-        let userPrompt = """
-        Translate the following text from \(sourceDesc) to \(targetLanguage.englishName):
-        
-        \(text)
-        """
-        
-        return (systemPrompt, userPrompt)
-    }
+
     
     private func buildURLRequest(url: String, body: GeminiGenerateRequest) throws -> URLRequest {
         guard let requestURL = URL(string: url) else {
@@ -226,7 +206,7 @@ final class GeminiProvider: LLMProvider {
             
             throw LLMProviderError.httpError(
                 statusCode: httpResponse.statusCode,
-                message: String(data: data, encoding: .utf8) ?? "Unknown error"
+                message: "Request failed with status \(httpResponse.statusCode)"
             )
         }
     }

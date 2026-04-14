@@ -99,30 +99,62 @@ struct AITranslatorApp: App {
     // SwiftData container
     private let modelContainer: ModelContainer
     
+    // Shared services (BUG-1 fix: single instances shared across main window & menu bar)
+    private let translationService: TranslationService
+    private let historyStore: HistoryStore
+    
+    // Shared ViewModels
+    @State private var translationVM: TranslationViewModel
+    @State private var historyVM: HistoryViewModel
+    @State private var settingsVM: SettingsViewModel
+    
     // Menu bar
     @State private var menuBarManager = MenuBarManager()
     
     init() {
+        let settings = SettingsManager.shared
+        let reg = ProviderRegistry.shared
+        
         // Initialize SwiftData
+        let container: ModelContainer
         do {
             let schema = Schema([TranslationRecord.self])
             let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-            modelContainer = try ModelContainer(for: schema, configurations: [config])
+            container = try ModelContainer(for: schema, configurations: [config])
         } catch {
             fatalError("Failed to initialize SwiftData: \(error)")
         }
+        self.modelContainer = container
         
         // Register LLM providers
-        registry.registerDefaults(settingsManager: settingsManager)
+        reg.registerDefaults(settingsManager: settings)
+        
+        // Create shared services — single instances used by both main window and menu bar
+        let service = TranslationService(registry: reg, settingsManager: settings)
+        let store = HistoryStore(modelContext: container.mainContext)
+        self.translationService = service
+        self.historyStore = store
+        
+        // Create shared ViewModels
+        _translationVM = State(initialValue: TranslationViewModel(
+            translationService: service,
+            settingsManager: settings,
+            historyStore: store
+        ))
+        _historyVM = State(initialValue: HistoryViewModel(historyStore: store))
+        _settingsVM = State(initialValue: SettingsViewModel(
+            settingsManager: settings,
+            registry: reg
+        ))
     }
     
     var body: some Scene {
         // Main window
         WindowGroup {
             ContentView(
-                settingsManager: settingsManager,
-                registry: registry,
-                modelContext: modelContainer.mainContext
+                translationVM: translationVM,
+                historyVM: historyVM,
+                settingsVM: settingsVM
             )
             .onAppear {
                 setupMenuBar()
@@ -136,12 +168,8 @@ struct AITranslatorApp: App {
     // MARK: - Menu Bar Setup
     
     private func setupMenuBar() {
-        let translationService = TranslationService(
-            registry: registry,
-            settingsManager: settingsManager
-        )
-        let historyStore = HistoryStore(modelContext: modelContainer.mainContext)
-        
+        // Menu bar gets its own TranslationViewModel (separate state)
+        // but shares the same service & history store — no duplicate instances
         let quickVM = TranslationViewModel(
             translationService: translationService,
             settingsManager: settingsManager,

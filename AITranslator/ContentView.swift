@@ -9,36 +9,22 @@ import SwiftUI
 import SwiftData
 
 /// Root content view with TabView navigation.
+/// BUG-1 fix: Receives pre-built ViewModels instead of creating its own service instances.
 struct ContentView: View {
     
-    @Environment(\.modelContext) private var modelContext
-    
-    // Dependencies
-    private let settingsManager: SettingsManager
-    private let registry: ProviderRegistry
-    
-    // ViewModels
+    // ViewModels (injected from AITranslatorApp)
     @State private var translationVM: TranslationViewModel
     @State private var historyVM: HistoryViewModel
     @State private var settingsVM: SettingsViewModel
     
-    init(settingsManager: SettingsManager, registry: ProviderRegistry, modelContext: ModelContext) {
-        self.settingsManager = settingsManager
-        self.registry = registry
-        
-        let translationService = TranslationService(registry: registry, settingsManager: settingsManager)
-        let historyStore = HistoryStore(modelContext: modelContext)
-        
-        _translationVM = State(initialValue: TranslationViewModel(
-            translationService: translationService,
-            settingsManager: settingsManager,
-            historyStore: historyStore
-        ))
-        _historyVM = State(initialValue: HistoryViewModel(historyStore: historyStore))
-        _settingsVM = State(initialValue: SettingsViewModel(
-            settingsManager: settingsManager,
-            registry: registry
-        ))
+    init(
+        translationVM: TranslationViewModel,
+        historyVM: HistoryViewModel,
+        settingsVM: SettingsViewModel
+    ) {
+        _translationVM = State(initialValue: translationVM)
+        _historyVM = State(initialValue: historyVM)
+        _settingsVM = State(initialValue: settingsVM)
     }
     
     var body: some View {

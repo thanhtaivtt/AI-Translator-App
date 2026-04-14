@@ -38,13 +38,21 @@ final class HistoryStore {
             translationDuration: duration
         )
         modelContext.insert(record)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            print("[HistoryStore] Failed to save record: \(error)")
+        }
     }
     
     /// Delete a specific record
     func delete(_ record: TranslationRecord) {
         modelContext.delete(record)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            print("[HistoryStore] Failed to delete record: \(error)")
+        }
     }
     
     /// Delete all records
@@ -53,7 +61,7 @@ final class HistoryStore {
             try modelContext.delete(model: TranslationRecord.self)
             try modelContext.save()
         } catch {
-            print("Failed to delete all records: \(error)")
+            print("[HistoryStore] Failed to delete all records: \(error)")
         }
     }
 }

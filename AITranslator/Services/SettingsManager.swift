@@ -86,8 +86,10 @@ final class SettingsManager {
     
     // MARK: - Keychain API Key Management
     
-    /// Save an API key to Keychain for a given provider
-    func saveAPIKey(_ key: String, for providerId: String) {
+    /// Save an API key to Keychain for a given provider.
+    /// Returns true if save succeeded, false otherwise.
+    @discardableResult
+    func saveAPIKey(_ key: String, for providerId: String) -> Bool {
         let account = "apikey-\(providerId)"
         
         // Delete existing key first
@@ -99,7 +101,7 @@ final class SettingsManager {
         SecItemDelete(deleteQuery as CFDictionary)
         
         // Add new key
-        guard let data = key.data(using: .utf8) else { return }
+        guard let data = key.data(using: .utf8) else { return false }
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
@@ -107,7 +109,11 @@ final class SettingsManager {
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
         ]
-        SecItemAdd(addQuery as CFDictionary, nil)
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        if status != errSecSuccess {
+            print("[Keychain] Failed to save API key for \(providerId): OSStatus \(status)")
+        }
+        return status == errSecSuccess
     }
     
     /// Retrieve an API key from Keychain for a given provider

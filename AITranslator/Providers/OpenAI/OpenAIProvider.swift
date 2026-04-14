@@ -45,7 +45,8 @@ final class OpenAIProvider: LLMProvider {
         customPrompt: String?
     ) async throws -> String {
         let apiKey = try getAPIKey()
-        let messages = buildMessages(text: text, from: sourceLanguage, to: targetLanguage, customPrompt: customPrompt)
+        let prompts = PromptBuilder.build(text: text, from: sourceLanguage, to: targetLanguage, customPrompt: customPrompt)
+        let messages: [OpenAIChatMessage] = [.system(prompts.system), .user(prompts.user)]
         
         let request = OpenAIChatRequest(model: model, messages: messages, stream: false)
         let urlRequest = try buildURLRequest(apiKey: apiKey, body: request)
@@ -75,7 +76,8 @@ final class OpenAIProvider: LLMProvider {
             Task {
                 do {
                     let apiKey = try getAPIKey()
-                    let messages = buildMessages(text: text, from: sourceLanguage, to: targetLanguage, customPrompt: customPrompt)
+                    let prompts = PromptBuilder.build(text: text, from: sourceLanguage, to: targetLanguage, customPrompt: customPrompt)
+                    let messages: [OpenAIChatMessage] = [.system(prompts.system), .user(prompts.user)]
                     let request = OpenAIChatRequest(model: model, messages: messages, stream: true)
                     let urlRequest = try buildURLRequest(apiKey: apiKey, body: request)
                     
@@ -144,34 +146,7 @@ final class OpenAIProvider: LLMProvider {
         return apiKey
     }
     
-    private func buildMessages(
-        text: String,
-        from sourceLanguage: Language,
-        to targetLanguage: Language,
-        customPrompt: String?
-    ) -> [OpenAIChatMessage] {
-        let systemPrompt: String
-        if let custom = customPrompt, !custom.isEmpty {
-            systemPrompt = custom
-        } else {
-            systemPrompt = AppDefaults.defaultSystemPrompt
-        }
-        
-        let sourceDesc = sourceLanguage == .auto
-            ? "the source language (auto-detect it)"
-            : sourceLanguage.englishName
-        
-        let userPrompt = """
-        Translate the following text from \(sourceDesc) to \(targetLanguage.englishName):
-        
-        \(text)
-        """
-        
-        return [
-            .system(systemPrompt),
-            .user(userPrompt)
-        ]
-    }
+
     
     private func buildURLRequest(apiKey: String, body: OpenAIChatRequest) throws -> URLRequest {
         guard let url = URL(string: baseURL) else {
@@ -209,7 +184,7 @@ final class OpenAIProvider: LLMProvider {
             
             throw LLMProviderError.httpError(
                 statusCode: httpResponse.statusCode,
-                message: String(data: data, encoding: .utf8) ?? "Unknown error"
+                message: "Request failed with status \(httpResponse.statusCode)"
             )
         }
     }

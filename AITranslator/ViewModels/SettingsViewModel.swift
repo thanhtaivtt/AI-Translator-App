@@ -19,6 +19,9 @@ final class SettingsViewModel {
     var showAPIKey: Bool = false
     var apiKeySaveStatus: String? = nil
     
+    /// Track status clear task for cancellation (CONC-1 fix)
+    private var statusClearTask: Task<Void, Never>?
+    
     init(settingsManager: SettingsManager = .shared, registry: ProviderRegistry = .shared) {
         self.settingsManager = settingsManager
         self.registry = registry
@@ -47,15 +50,15 @@ final class SettingsViewModel {
             return
         }
         
-        settingsManager.saveAPIKey(key, for: settingsManager.selectedProviderId)
-        apiKeyInput = "••••••••••••••••••••"
-        apiKeySaveStatus = "✓ API key saved securely"
-        
-        // Clear status after 3 seconds
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            apiKeySaveStatus = nil
+        let success = settingsManager.saveAPIKey(key, for: settingsManager.selectedProviderId)
+        if success {
+            apiKeyInput = "••••••••••••••••••••"
+            apiKeySaveStatus = "✓ API key saved securely"
+        } else {
+            apiKeySaveStatus = "⚠ Failed to save API key to Keychain"
         }
+        
+        scheduleStatusClear()
     }
     
     /// Delete the API key
@@ -64,10 +67,7 @@ final class SettingsViewModel {
         apiKeyInput = ""
         apiKeySaveStatus = "API key removed"
         
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            apiKeySaveStatus = nil
-        }
+        scheduleStatusClear()
     }
     
     /// Called when provider selection changes
@@ -90,5 +90,17 @@ final class SettingsViewModel {
     /// Reset custom prompt to default
     func resetPromptToDefault() {
         settingsManager.customSystemPrompt = ""
+    }
+    
+    // MARK: - Private
+    
+    /// Cancel previous task & schedule status message auto-clear
+    private func scheduleStatusClear() {
+        statusClearTask?.cancel()
+        statusClearTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            apiKeySaveStatus = nil
+        }
     }
 }

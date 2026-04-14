@@ -45,12 +45,12 @@ final class AnthropicProvider: LLMProvider {
         customPrompt: String?
     ) async throws -> String {
         let apiKey = try getAPIKey()
-        let (systemPrompt, userPrompt) = buildPrompts(text: text, from: sourceLanguage, to: targetLanguage, customPrompt: customPrompt)
+        let prompts = PromptBuilder.build(text: text, from: sourceLanguage, to: targetLanguage, customPrompt: customPrompt)
         
         let request = AnthropicMessagesRequest(
             model: model,
-            system: systemPrompt,
-            messages: [.user(userPrompt)],
+            system: prompts.system,
+            messages: [.user(prompts.user)],
             stream: false
         )
         let urlRequest = try buildURLRequest(apiKey: apiKey, body: request)
@@ -81,12 +81,12 @@ final class AnthropicProvider: LLMProvider {
             Task {
                 do {
                     let apiKey = try getAPIKey()
-                    let (systemPrompt, userPrompt) = buildPrompts(text: text, from: sourceLanguage, to: targetLanguage, customPrompt: customPrompt)
+                    let prompts = PromptBuilder.build(text: text, from: sourceLanguage, to: targetLanguage, customPrompt: customPrompt)
                     
                     let request = AnthropicMessagesRequest(
                         model: model,
-                        system: systemPrompt,
-                        messages: [.user(userPrompt)],
+                        system: prompts.system,
+                        messages: [.user(prompts.user)],
                         stream: true
                     )
                     let urlRequest = try buildURLRequest(apiKey: apiKey, body: request)
@@ -136,8 +136,8 @@ final class AnthropicProvider: LLMProvider {
                             default:
                                 continue
                             }
-                        } catch is LLMProviderError {
-                            throw LLMProviderError.streamingError(message: "Stream error")
+                        } catch let error as LLMProviderError {
+                            throw error  // Re-throw original error
                         } catch {
                             // Skip malformed chunks
                             continue
@@ -161,31 +161,7 @@ final class AnthropicProvider: LLMProvider {
         return apiKey
     }
     
-    private func buildPrompts(
-        text: String,
-        from sourceLanguage: Language,
-        to targetLanguage: Language,
-        customPrompt: String?
-    ) -> (system: String, user: String) {
-        let systemPrompt: String
-        if let custom = customPrompt, !custom.isEmpty {
-            systemPrompt = custom
-        } else {
-            systemPrompt = AppDefaults.defaultSystemPrompt
-        }
-        
-        let sourceDesc = sourceLanguage == .auto
-            ? "the source language (auto-detect it)"
-            : sourceLanguage.englishName
-        
-        let userPrompt = """
-        Translate the following text from \(sourceDesc) to \(targetLanguage.englishName):
-        
-        \(text)
-        """
-        
-        return (systemPrompt, userPrompt)
-    }
+
     
     private func buildURLRequest(apiKey: String, body: AnthropicMessagesRequest) throws -> URLRequest {
         guard let url = URL(string: baseURL) else {
@@ -223,7 +199,7 @@ final class AnthropicProvider: LLMProvider {
             
             throw LLMProviderError.httpError(
                 statusCode: httpResponse.statusCode,
-                message: String(data: data, encoding: .utf8) ?? "Unknown error"
+                message: "Request failed with status \(httpResponse.statusCode)"
             )
         }
     }

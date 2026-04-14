@@ -49,12 +49,17 @@ final class TranslationRecord {
         Language(rawValue: targetLanguageCode)
     }
     
+    /// Cached date formatter (BUG-3 fix: avoid creating new instance per call)
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
+    
     /// Formatted timestamp
     var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: timestamp)
+        Self.dateFormatter.string(from: timestamp)
     }
     
     /// Short preview of source text (for list display)

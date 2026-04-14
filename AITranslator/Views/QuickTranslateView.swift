@@ -324,9 +324,3 @@ struct QuickTranslateView: View {
         }
     }
 }
-
-// MARK: - Notification Name
-
-extension Notification.Name {
-    static let openMainWindow = Notification.Name("openMainWindow")
-}
