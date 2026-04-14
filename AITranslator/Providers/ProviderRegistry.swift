@@ -31,9 +31,8 @@ final class ProviderRegistry {
     /// Register default providers. Call this once at app startup.
     func registerDefaults(settingsManager: SettingsManager) {
         register(OpenAIProvider(settingsManager: settingsManager))
-        // Future providers:
-        // register(GeminiProvider(settingsManager: settingsManager))
-        // register(AnthropicProvider(settingsManager: settingsManager))
+        register(AnthropicProvider(settingsManager: settingsManager))
+        register(GeminiProvider(settingsManager: settingsManager))
     }
     
     /// Register a provider
