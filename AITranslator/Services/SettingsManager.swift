@@ -6,16 +6,21 @@
 //
 
 import Foundation
-import Security
+import CryptoKit
+import IOKit
 
-/// Manages app settings via UserDefaults and API keys via Keychain.
+/// Manages app settings via UserDefaults and API keys via encrypted file storage.
+///
+/// API keys are AES-256-GCM encrypted and stored in the app's sandboxed
+/// Application Support directory. The encryption key is derived from a
+/// device-stable identifier, ensuring keys are only readable on this machine.
 @Observable
 final class SettingsManager {
     
     static let shared = SettingsManager()
     
     private let defaults = UserDefaults.standard
-    private let keychainService = "me.taivt.AITranslator"
+    private let storageDir: URL
     
     // MARK: - Published Settings
     
@@ -50,6 +55,11 @@ final class SettingsManager {
     // MARK: - Init
     
     private init() {
+        // Setup encrypted storage directory
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        self.storageDir = appSupport.appendingPathComponent("AITranslator/keys", isDirectory: true)
+        try? FileManager.default.createDirectory(at: storageDir, withIntermediateDirectories: true)
+        
         self.selectedProviderId = defaults.string(forKey: SettingsKey.selectedProviderId.rawValue)
             ?? AppDefaults.providerId
         
@@ -84,95 +94,76 @@ final class SettingsManager {
         self.autoTranslateDelay = delay > 0 ? delay : AppDefaults.autoTranslateDelay
     }
     
-    // MARK: - Keychain API Key Management
+    // MARK: - Encrypted API Key Storage
     
-    /// Save an API key to Keychain for a given provider.
-    /// Returns true if save succeeded, false otherwise.
+    /// Save an API key (encrypted) for a given provider.
     @discardableResult
     func saveAPIKey(_ key: String, for providerId: String) -> Bool {
-        let account = "apikey-\(providerId)"
-        
-        // Delete existing key first
-        let deleteQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(deleteQuery as CFDictionary)
-        
-        // Add new key
-        guard let data = key.data(using: .utf8) else { return false }
-        
-        var addQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account,
-            kSecValueData as String: data,
-        ]
-        
-        // Use SecAccessControl to allow access without password prompt.
-        // The app is sandboxed, so only this app can access its own keychain items.
-        var error: Unmanaged<CFError>?
-        if let accessControl = SecAccessControlCreateWithFlags(
-            nil,
-            kSecAttrAccessibleAfterFirstUnlock,
-            [],  // No additional constraints — no password/biometric prompt
-            &error
-        ) {
-            addQuery[kSecAttrAccessControl as String] = accessControl
-        } else {
-            // Fallback: use kSecAttrAccessible directly
-            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        guard let plaintext = key.data(using: .utf8) else { return false }
+        do {
+            let sealed = try AES.GCM.seal(plaintext, using: encryptionKey())
+            guard let combined = sealed.combined else { return false }
+            try combined.write(to: fileURL(for: providerId))
+            return true
+        } catch {
+            print("[KeyStore] Failed to save API key for \(providerId): \(error)")
+            return false
         }
-        
-        let status = SecItemAdd(addQuery as CFDictionary, nil)
-        if status != errSecSuccess {
-            print("[Keychain] Failed to save API key for \(providerId): OSStatus \(status)")
-        }
-        return status == errSecSuccess
     }
     
-    /// Retrieve an API key from Keychain for a given provider
+    /// Retrieve a decrypted API key for a given provider.
     func getAPIKey(for providerId: String) -> String? {
-        let account = "apikey-\(providerId)"
-        
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        
-        guard status == errSecSuccess, let data = result as? Data else {
+        let url = fileURL(for: providerId)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        do {
+            let data = try Data(contentsOf: url)
+            let box = try AES.GCM.SealedBox(combined: data)
+            let decrypted = try AES.GCM.open(box, using: encryptionKey())
+            return String(data: decrypted, encoding: .utf8)
+        } catch {
+            print("[KeyStore] Failed to read API key for \(providerId): \(error)")
             return nil
         }
-        
-        return String(data: data, encoding: .utf8)
     }
     
-    /// Delete an API key from Keychain
+    /// Delete an API key.
     func deleteAPIKey(for providerId: String) {
-        let account = "apikey-\(providerId)"
-        
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(query as CFDictionary)
+        try? FileManager.default.removeItem(at: fileURL(for: providerId))
     }
     
-    /// Check if an API key exists for a provider
+    /// Check if an API key exists for a provider.
     func hasAPIKey(for providerId: String) -> Bool {
-        getAPIKey(for: providerId) != nil
+        FileManager.default.fileExists(atPath: fileURL(for: providerId).path)
     }
     
     /// Get the effective system prompt (custom if set, otherwise default)
     var effectiveSystemPrompt: String {
         customSystemPrompt.isEmpty ? AppDefaults.defaultSystemPrompt : customSystemPrompt
+    }
+    
+    // MARK: - Private
+    
+    private func fileURL(for providerId: String) -> URL {
+        storageDir.appendingPathComponent("\(providerId).key")
+    }
+    
+    /// Derive a stable encryption key from machine-specific data.
+    /// The key is deterministic per-machine so it survives app restarts.
+    private func encryptionKey() -> SymmetricKey {
+        // Use hardware UUID as seed — unique per Mac, stable across reboots
+        let seed = machineID()
+        let salt = "me.taivt.AITranslator.keystore"
+        let keyMaterial = SHA256.hash(data: Data((seed + salt).utf8))
+        return SymmetricKey(data: keyMaterial)
+    }
+    
+    /// Get a stable machine identifier (hardware UUID).
+    private func machineID() -> String {
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPlatformExpertDevice"))
+        defer { IOObjectRelease(service) }
+        if let uuid = IORegistryEntryCreateCFProperty(service, "IOPlatformUUID" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? String {
+            return uuid
+        }
+        return "fallback-\(ProcessInfo.processInfo.hostName)"
     }
 }
