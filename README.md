@@ -30,11 +30,13 @@
 - 📋 **Tab-based Interface** — Clean 3-tab layout: Translate, History, Settings
 - 🔽 **Menu Bar Quick Translate** — Instant translation from the macOS menu bar without opening the full app
 - 🕐 **Translation History** — All translations saved locally with search and detail view (SwiftData)
-- 🔐 **Secure API Key Storage** — Keys stored in macOS Keychain, never in plain text
+- 🔐 **Secure API Key Storage** — Keys encrypted with AES-256-GCM and stored in the app's sandboxed directory
 - 🌍 **12+ Languages** — Vietnamese, English, Japanese, Korean, Chinese, French, German, Spanish, Thai, Portuguese, Russian, Italian
 - ⌨️ **Keyboard Shortcuts** — `⌘↵` to translate instantly
 - 🎨 **Native macOS Design** — Follows Apple HIG with dark/light mode support
 - 📦 **Zero Dependencies** — No SPM packages, no CocoaPods, no Carthage. Pure Apple frameworks only.
+- 🪟 **Single Window** — Only one main window instance; `⌘Q` hides to tray, right-click tray to quit
+- 🔄 **Auto Update Check** — Checks for new releases on GitHub at launch
 
 ## 🖥️ Screenshots
 
@@ -95,10 +97,10 @@ xcodebuild -project AITranslator.xcodeproj -scheme AITranslator -configuration D
 1. Launch the app — you'll see the main window and a 🌐 icon in the **menu bar**
 2. Go to the **Settings** tab
 3. Select your preferred **provider** (OpenAI, Anthropic, or Gemini)
-4. Enter your **API key** → Click **Save** (stored securely in Keychain)
+4. Enter your **API key** → Click **Save** (encrypted and stored locally)
 5. Switch to the **Translate** tab and start translating!
 
-> **Tip:** Click the menu bar icon for quick translations without opening the full app window.
+> **Tip:** Left-click the menu bar icon for quick translations. Right-click for options including "Quit".
 
 ## 🔌 Supported Providers
 
@@ -135,10 +137,11 @@ AITranslator/
 │
 ├── Services/
 │   ├── TranslationService.swift   # Translation orchestration
-│   ├── SettingsManager.swift      # UserDefaults + Keychain
+│   ├── SettingsManager.swift      # UserDefaults + encrypted key storage
 │   ├── HistoryStore.swift         # SwiftData persistence
-│   ├── MenuBarManager.swift       # Menu bar status item + popover
-│   └── PromptBuilder.swift        # Shared prompt construction
+│   ├── MenuBarManager.swift       # Menu bar status item + popover + context menu
+│   ├── PromptBuilder.swift        # Shared prompt construction
+│   └── UpdateChecker.swift        # GitHub release update checker
 │
 ├── ViewModels/                    # MVVM ViewModels
 │   ├── TranslationViewModel.swift
@@ -151,14 +154,14 @@ AITranslator/
 │   ├── SettingsView.swift         # App configuration
 │   ├── QuickTranslateView.swift   # Menu bar popover UI
 │   └── Components/
-│       ├── LanguagePicker.swift
+│       ├── LanguagePicker.swift   # Language dropdown with flag + code labels
 │       └── TranslationCard.swift
 │
 ├── Extensions/
 │   ├── Color+Theme.swift          # Color palette & view modifiers
 │   └── Notification+Names.swift   # Centralized notification names
 │
-├── AITranslatorApp.swift          # App entry point + DI
+├── AITranslatorApp.swift          # App entry point + DI + single instance
 └── ContentView.swift              # Root TabView
 ```
 
@@ -169,7 +172,7 @@ AITranslator/
 | **Protocol-Oriented** | `LLMProvider` protocol defines the contract for all AI providers |
 | **MVVM** | Clean separation between Views, ViewModels, and Services |
 | **Dependency Injection** | All dependencies created at App level, injected via initializers |
-| **Zero Dependencies** | URLSession for networking, Security framework for Keychain, SwiftData for persistence |
+| **Zero Dependencies** | URLSession for networking, CryptoKit for encryption, SwiftData for persistence |
 | **Observable** | Swift Observation framework (`@Observable`) for reactive UI |
 
 ## 🔌 Adding a New Provider
@@ -243,11 +246,12 @@ That's it! The UI automatically picks up the new provider in Settings.
 
 ## 🔒 Security
 
-- **API keys** are stored in the macOS **Keychain** via the Security framework
+- **API keys** are encrypted with **AES-256-GCM** (via CryptoKit) and stored in the app's sandboxed Application Support directory
+- Encryption key is derived from the machine's **hardware UUID** — keys cannot be decrypted on another machine
 - The app runs in an **App Sandbox** with only `network.client` entitlement
 - No data is sent anywhere except to the configured AI provider's API
 - All translation history is stored **locally** on your machine using SwiftData
-- Keychain operations are validated with status checks
+- No Apple Developer account required for key storage (no Keychain dependency)
 
 ## 🛠️ Tech Stack
 
@@ -257,11 +261,22 @@ That's it! The UI automatically picks up the new provider in Settings.
 | Persistence | SwiftData |
 | Networking | URLSession (native) |
 | Streaming | Server-Sent Events (SSE) parser |
-| Security | Keychain (Security framework) |
+| Key Storage | AES-256-GCM encryption (CryptoKit) |
 | Reactivity | Swift Observation (@Observable) |
 | Settings | UserDefaults |
 | CI/CD | GitHub Actions (auto release on tag) |
 | Min Target | macOS 15.4 |
+
+## 🪟 Window Behavior
+
+| Action | Behavior |
+|--------|----------|
+| **⌘Q** | Hides the app (tray icon stays) |
+| **⌘W** / Close button | Hides the window, removes from ⌘Tab |
+| **Left-click tray icon** | Opens quick translate popover |
+| **Right-click tray icon** | Context menu: Show Window / Quit |
+| **Click Dock icon** | Restores the main window |
+| **⌘N** | Disabled (single window app) |
 
 ## 🚢 Releases
 
