@@ -16,8 +16,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     
     /// Reference to the main SwiftUI window
     weak var mainWindow: NSWindow?
+    /// When true, ⌘Q actually quits instead of hiding
+    var shouldReallyQuit = false
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Enforce single instance: disable "New Window" menu item
+        NSApp.mainMenu?.item(withTitle: "File")?.submenu?.item(withTitle: "New Window")?.isHidden = true
+        
         // Listen for "open main window" requests from the menu bar popover
         NotificationCenter.default.addObserver(
             self,
@@ -44,15 +49,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return false
     }
     
+    /// Intercept ⌘Q — hide app instead of quitting (tray stays alive)
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if shouldReallyQuit { return .terminateNow }
+        hideApp()
+        return .terminateCancel
+    }
+    
+    /// Block ⌘N — redirect to showing existing window
+    @objc func newWindowForTab(_ sender: Any?) {
+        showMainWindow()
+    }
+    
     // MARK: - NSWindowDelegate
     
-    /// Hide the window instead of destroying it
+    /// Hide the window and remove from ⌘Tab instead of destroying it
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        sender.orderOut(nil)  // Hide, don't destroy
+        hideApp()
         return false
     }
     
     // MARK: - Window Management
+    
+    /// Hide window and switch to accessory mode (removes from ⌘Tab, keeps tray)
+    func hideApp() {
+        mainWindow?.orderOut(nil)
+        NSApp.setActivationPolicy(.accessory)
+    }
     
     private func captureMainWindow() {
         guard mainWindow == nil else { return }
@@ -79,6 +102,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         
         if let window = mainWindow {
+            // Restore in ⌘Tab and show window
+            NSApp.setActivationPolicy(.regular)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -167,6 +192,10 @@ struct AITranslatorApp: App {
         .modelContainer(modelContainer)
         .windowStyle(.automatic)
         .defaultSize(width: 900, height: 650)
+        .commands {
+            // Remove "New Window" (⌘N) — single window app
+            CommandGroup(replacing: .newItem) { }
+        }
     }
     
     // MARK: - Menu Bar Setup

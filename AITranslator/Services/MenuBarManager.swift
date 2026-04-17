@@ -14,6 +14,7 @@ final class MenuBarManager: NSObject {
     
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
+    private var contextMenu: NSMenu?
     private var eventMonitor: Any?
     
     var isPopoverShown: Bool = false
@@ -36,9 +37,18 @@ final class MenuBarManager: NSObject {
                 button.image = NSImage(systemSymbolName: "globe", accessibilityDescription: "AI Translator")
                 button.image?.size = NSSize(width: 18, height: 18)
             }
-            button.action = #selector(togglePopover)
+            button.action = #selector(handleClick)
             button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+        
+        // Create right-click context menu
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Show Window", action: #selector(showMainWindow), keyEquivalent: "")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit AI Translator", action: #selector(quitApp), keyEquivalent: "q")
+        for item in menu.items { item.target = self }
+        self.contextMenu = menu
         
         // Create popover
         let popover = NSPopover()
@@ -57,6 +67,19 @@ final class MenuBarManager: NSObject {
         }
     }
     
+    @objc private func handleClick(_ sender: NSStatusBarButton) {
+        let event = NSApp.currentEvent!
+        if event.type == .rightMouseUp {
+            // Right-click: show context menu
+            closePopover()
+            statusItem?.menu = contextMenu
+            statusItem?.button?.performClick(nil)
+            statusItem?.menu = nil  // Reset so left-click works again
+        } else {
+            togglePopover()
+        }
+    }
+    
     @objc private func togglePopover() {
         if let popover = popover, let button = statusItem?.button {
             if popover.isShown {
@@ -69,6 +92,18 @@ final class MenuBarManager: NSObject {
                 NSApp.activate(ignoringOtherApps: true)
             }
         }
+    }
+    
+    @objc private func showMainWindow() {
+        closePopover()
+        NotificationCenter.default.post(name: .openMainWindow, object: nil)
+    }
+    
+    @objc private func quitApp() {
+        if let delegate = NSApp.delegate as? AppDelegate {
+            delegate.shouldReallyQuit = true
+        }
+        NSApp.terminate(nil)
     }
     
     func closePopover() {
