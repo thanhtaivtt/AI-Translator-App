@@ -75,20 +75,18 @@ final class TranslationViewModel {
     
     /// Swap source and target languages (and texts if applicable)
     func swapLanguages() {
-        guard sourceLanguage != .auto else { return }
+        if sourceLanguage != .auto {
+            let tempLang = sourceLanguage
+            sourceLanguage = targetLanguage
+            targetLanguage = tempLang
+            settingsManager.sourceLanguage = sourceLanguage
+            settingsManager.targetLanguage = targetLanguage
+        }
         
-        let tempLang = sourceLanguage
-        sourceLanguage = targetLanguage
-        targetLanguage = tempLang
-        
-        // Also swap texts
+        // Always swap texts
         let tempText = sourceText
         sourceText = translatedText
         translatedText = tempText
-        
-        // Save to settings
-        settingsManager.sourceLanguage = sourceLanguage
-        settingsManager.targetLanguage = targetLanguage
     }
     
     /// Clear both source and translated text

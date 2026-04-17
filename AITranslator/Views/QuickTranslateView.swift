@@ -92,8 +92,6 @@ struct QuickTranslateView: View {
                     .background(.ultraThinMaterial, in: Circle())
             }
             .buttonStyle(.plain)
-            .disabled(viewModel.sourceLanguage == .auto)
-            .opacity(viewModel.sourceLanguage == .auto ? 0.4 : 1.0)
             
             LanguagePicker(
                 title: "Target",

@@ -62,8 +62,6 @@ struct TranslateView: View {
                     )
             }
             .buttonStyle(.plain)
-            .disabled(viewModel.sourceLanguage == .auto)
-            .opacity(viewModel.sourceLanguage == .auto ? 0.4 : 1.0)
             .help("Swap languages")
             
             LanguagePicker(
